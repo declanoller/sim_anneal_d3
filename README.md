@@ -8,7 +8,7 @@ Overview
 In this project, I made two interactive demonstrations of Simulated Annealing, using the javascript d3.js library.The first demonstration lets you use it to solve the classic physics brachistochrone problem:
 
 <p align="center">
-  <img width="600" height="400" src="other/brach_sim.png">
+  <img width="800" height="480" src="other/brach_sim.png">
 </p>
 
 However, the problem may actually be convex, so it doesn't demonstrate the true ability of SA.
