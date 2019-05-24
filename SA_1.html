@@ -1,0 +1,716 @@
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://unpkg.com/d3-simple-slider"></script>
+
+<style>
+.active {
+  stroke: #000;
+  stroke-width: 2px;
+}
+</style>
+
+<div class="horiz_container" id="plots_row">
+  <div class="plot_container" id="brach_plot"></div>
+  <div class="plot_container" id="FF_plot"></div>
+</div>
+
+
+<div class="horiz_container" id="sliders_row">
+
+  <div class="slider_label_container">
+    <div class="slider_label"><p id="value_height"></p></div>
+    <div class="slider" id="slider_height"></div>
+  </div>
+
+  <div class="slider_label_container">
+    <div class="slider_label"><p id="value_strength"></p></div>
+    <div class="slider" id="slider_strength" text-align="center"></div>
+  </div>
+
+  <div class="slider_label_container">
+    <div class="slider_label"><p id="value_temp"></p></div>
+    <div class="slider" id="slider_temp"></div>
+  </div>
+
+</div>
+
+
+<div class="horiz_container" id="buttons_row">
+  <div class="button_container">
+      <input name="RunButton"
+             type="button"
+             value="Run (500 iterations)"
+             onclick="run_sim()" />
+  </div>
+
+  <div class="button_container">
+      <input name="ResetButton"
+             type="button"
+             value="Reset"
+             onclick="reset_sim()" />
+  </div>
+</div>
+
+<script>
+
+
+
+var N_mutations = 500;
+
+var N_circles = 20;
+
+var init_height = 0.5;
+var min_upper_height = 0.2
+var max_upper_height = 1.5;
+
+var min_height = -0.5;
+var max_height = init_height;
+var percent_max = 0.95;
+var delay = 20;
+
+
+var svg_plot_dim = {width : 500, height : 370};
+var plot_margin = {top: 60, bottom: 40, right: 60, left: 60};
+var plot_dim = {
+  width : (svg_plot_dim.width - plot_margin.left - plot_margin.right),
+  height : (svg_plot_dim.height - plot_margin.top - plot_margin.bottom)
+};
+
+var svg_slider_dim = {width : 320, height : 150};
+var slider_dim = {width : 260, height : 80};
+var slider_transform_percent = 10;
+
+
+var svg_brach = d3.select("div#brach_plot")
+                .append('svg')
+                .attr('width', svg_plot_dim.width)
+                .attr('height', svg_plot_dim.height);
+
+var svg_FF = d3.select("div#FF_plot")
+                .append('svg')
+                .attr('width', svg_plot_dim.width)
+                .attr('height', svg_plot_dim.height);
+
+
+
+
+////////////////////////////////////////// sliders
+
+var strength_data = [Math.pow(10, -2), 1.0]
+
+// Fill
+var slider_strength = d3
+  .sliderBottom()
+  .min(d3.min(strength_data))
+  .max(d3.max(strength_data))
+  .width(slider_dim.width)
+  .tickFormat(d3.format('.2'))
+  .ticks(5)
+  .default(init_height)
+  .fill('dodgerblue')
+  .on('onchange', val => {
+    d3.select('p#value_strength').text("Mutation strength: " + d3.format('.2')(val)).attr("font-size", "16px");
+  });
+
+var gFill_strength = d3
+  .select('div#slider_strength')
+  .append('svg')
+  .attr('width', svg_slider_dim.width)
+  .attr('height', slider_dim.height)
+  .append('g')
+  .style('transform', 'translate(' + slider_transform_percent +'%, 10%)');
+
+gFill_strength.call(slider_strength);
+
+d3.select('p#value_strength').text("Mutation strength: " + d3.format('.2')(slider_strength.value())).attr("font-size", "16px");
+
+/////////////////////////////////////////////////////////////
+
+var temp_data = [0.0001, 0.5];
+
+// Fill
+var slider_temp = d3
+  .sliderBottom()
+  .min(d3.min(temp_data))
+  .max(d3.max(temp_data))
+  .width(slider_dim.width)
+  .tickFormat(d3.format('.1'))
+  .ticks(5)
+  .default(0.015)
+  .fill('tomato')
+  .on('onchange', val => {
+    d3.select('p#value_temp').text("Temperature: " + d3.format('.2')(val)).attr("font-size", "16px");
+  });
+
+var gFill_temp = d3
+  .select('div#slider_temp')
+  .append('svg')
+  .attr('width', svg_slider_dim.width)
+  .attr('height', slider_dim.height)
+  .append('g')
+  .style('transform', 'translate(' + slider_transform_percent +'%, 10%)');
+
+gFill_temp.call(slider_temp);
+
+d3.select('p#value_temp').text("Temperature: " + d3.format('.2')(slider_temp.value())).attr("font-size", "14px");
+
+
+////////////////////////////////////////////
+
+
+var height_data = [min_upper_height, max_upper_height];
+
+// Fill
+var slider_height = d3
+  .sliderBottom()
+  .min(d3.min(height_data))
+  .max(d3.max(height_data))
+  .width(slider_dim.width)
+  .tickFormat(d3.format('.2'))
+  .ticks(5)
+  .default(0.5)
+  .fill('black')
+  .on('onchange', val => {
+    d3.select('p#value_height').text("Height difference: " + d3.format('.2')(val)).attr("font-size", "16px");
+  });
+
+var gFill_height = d3
+  .select('div#slider_height')
+  .append('svg')
+  .attr('width', svg_slider_dim.width)
+  .attr('height', slider_dim.height)
+  .append('g')
+  .style('transform', 'translate(' + slider_transform_percent +'%, 10%)');
+
+gFill_height.call(slider_height);
+
+d3.select('p#value_height').text("Height difference: " + d3.format('.2')(slider_height.value())).attr("font-size", "14px");
+
+
+
+
+//////////////////////////////////// Style stuff
+
+d3.selectAll(".plot_container")
+          .style('display', 'inline-block');
+
+d3.selectAll(".horiz_container")
+          .style('text-align', 'center');
+
+d3.selectAll(".slider_label")
+          .style('text-align', 'center');
+
+d3.selectAll(".slider")
+          .style('text-align', 'center');
+
+d3.selectAll(".slider_label_container")
+          .style('display', 'inline-block')
+          .style('padding-top', '20px')
+          .style('padding-bottom', '0px')
+          .style('padding-left', '0%')
+          .style('padding-right', '0%');
+
+
+d3.selectAll(".button_container")
+          .style('display', 'inline-block')
+          .style('padding-top', '0px')
+          .style('padding-bottom', '20px')
+          .style('padding-left', '1%')
+          .style('padding-right', '1%');
+
+/////////////////////////////////////////////// Data
+
+function reset_circles(){
+  var new_circles_dat = d3.range(N_circles).map(function(i) {
+
+    max_height = slider_height.value();
+    if (i==0){
+      y_sel = max_height;
+    }
+    else if (i==N_circles-1){
+      y_sel = 0.0;
+    }
+    else {
+      y_sel = min_height + (percent_max*max_height - min_height)*Math.random();
+    }
+    return {
+      index: i,
+      x: i / (N_circles - 1),
+      y: y_sel
+    };
+  });
+  return new_circles_dat;
+}
+
+var circles_dat = reset_circles();
+
+
+var FF_hist_all = [{
+    x: 0,
+    y: fitness_function(circles_dat.map(el => el.y))
+  }];
+
+var FF_hist_accepted = [{
+    x: 0,
+    y: fitness_function(circles_dat.map(el => el.y))
+  }];
+
+
+//////////////////////// Scales and axes
+
+var x_brach = d3.scaleLinear()
+    .domain([0, 1.0])
+    .range([0, plot_dim.width]);
+
+var y_brach = d3.scaleLinear()
+    .domain(d3.extent(circles_dat, function(d) { return d.y; }).map(x=>1.1*x))
+    .range([plot_dim.height, 0]);
+
+//.domain([0, 1.0])
+var x_FF = d3.scaleLinear()
+    .domain([0, Math.max(...FF_hist_all.map(el => el.x))])
+    .range([0, plot_dim.width]);
+
+
+var y_FF = d3.scaleLinear()
+    .domain(d3.extent(FF_hist_all, function(d) { return d.y; }).map(x=>1.1*x))
+    .range([plot_dim.height, 0]);
+
+//.domain(d3.extent(FF_hist_all, function(d) { return d.y; }).map(x=>1.1*x))
+
+var xAxis_brach = d3.axisBottom(x_brach),
+    yAxis_brach = d3.axisLeft(y_brach);
+
+
+var xAxis_FF = d3.axisBottom(x_FF),
+    yAxis_FF = d3.axisLeft(y_FF);
+
+
+var line_brach = d3.line()
+    .x(function(d) { return x_brach(d.x); })
+    .y(function(d) { return y_brach(d.y); });
+
+
+var line_FF = d3.line()
+    .x(function(d) { return x_FF(d.x); })
+    .y(function(d) { return y_FF(d.y); });
+
+
+
+/////////////////////////////////// Plot stuff
+
+let drag = d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended);
+
+var plot_brach = svg_brach.append("g")
+              .attr("transform", "translate(" + plot_margin.left + "," + plot_margin.top + ")");
+
+var plot_FF = svg_FF.append("g")
+              .attr("transform", "translate(" + plot_margin.left + "," + plot_margin.top + ")");
+
+plot_brach.append("path")
+    .datum(circles_dat)
+    .attr("fill", "none")
+    .attr("stroke", "royalblue")
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .attr("stroke-width", 1.5)
+    .attr("d", line_brach);
+
+plot_FF.append("path")
+    .datum(FF_hist_all)
+    .attr('class', 'all')
+    .attr("fill", "none")
+    .attr("stroke", "tomato")
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .attr("stroke-width", 2.5)
+    .attr("d", line_FF);
+
+plot_FF.append("path")
+    .datum(FF_hist_accepted)
+    .attr('class', 'accepted')
+    .attr("fill", "none")
+    .attr("stroke", "black")
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .attr("stroke-width", 1.7)
+    .attr("d", line_FF);
+
+
+//////////////////////////// Text stuff
+
+var text_data_brach = [
+  {x: plot_dim.width/2, y: -plot_margin.top/2, label: 'status', txt: 'Drag the points around!', size : '22px'},
+  {x: plot_dim.width/2, y: plot_dim.height + plot_margin.bottom, label: 'iter', txt: 'x', size : '16px'}
+];
+
+var text_data_FF = [
+  {x: plot_dim.width/2, y: -plot_margin.top/2, label: 'status', txt: 'Changes proposed (red) and accepted (black)', size : '22px'},
+  {x: plot_dim.width/2, y: plot_dim.height + plot_margin.bottom, label: 'iter', txt: 'Iteration', size : '16px'}
+];
+
+var text_brach = plot_brach.selectAll("text")
+                        .data(text_data_brach)
+                        .enter()
+                        .append("text");
+
+var text_FF = plot_FF.selectAll("text")
+                        .data(text_data_FF)
+                        .enter()
+                        .append("text");
+
+
+var text_labels_brach = text_brach
+                 .attr("x", d => d.x)
+                 .attr("y", d => d.y)
+                 .text( function (d) {return d.txt;})
+                 .attr("font-family", "serif")
+                 .attr("font-size", function(d) {return d.size;})
+                 .attr("text-anchor", "middle")
+                 .attr("fill", "black");
+
+var text_labels_FF = text_FF
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .text( function (d) {return d.txt;})
+                .attr("font-family", "serif")
+                .attr("font-size", d => d.size)
+                .attr("text-anchor", "middle")
+                .attr("fill", "black");
+
+
+
+plot_brach.selectAll('circle')
+    .data(circles_dat)
+    .enter()
+    .append('circle')
+    .transition()
+    .attr('r', 8.0)
+    .attr('cx', d => x_brach(d.x))
+    .attr('cy', d => y_brach(d.y))
+    .attr('ind', d => d.index)
+    .style('cursor', 'pointer')
+    .style('stroke', 'black')
+    .style('stroke-width', 1.0)
+    .style('fill', function(d,i){
+      if (i==0 || i==circles_dat.length-1){
+        return 'black';
+      }
+      else{
+        return 'dodgerblue';
+      }
+    });
+
+plot_brach.selectAll('circle')
+        .call(drag);
+
+plot_brach.append('g')
+    .attr('transform', 'translate(0,' + plot_dim.height + ')')
+    .attr('class', 'x axis')
+    .call(xAxis_brach);
+
+plot_brach.append('g')
+    .attr('class', 'y axis')
+    .call(yAxis_brach);
+
+plot_FF.append('g')
+    .attr('transform', 'translate(0,' + plot_dim.height + ')')
+    .attr('class', 'x axis')
+    .call(xAxis_FF);
+
+plot_FF.append('g')
+    .attr('class', 'y axis')
+    .call(yAxis_FF);
+
+function dragstarted(d) {
+    d3.select(this).raise().classed('active', true);
+    //console.log('data of selected:' + d3.select(this).data()[0].y);
+    //console.log('cur_ind: ' + parseInt(d3.select(this).attr('ind')));
+}
+
+
+function dragged(d) {
+    var cur_mouse_y = y_brach.invert(d3.mouse(this)[1]);
+    var cur_y = y_brach.invert(d3.select(this).attr('cy'));
+    //console.log('\n\nevent.y: ' + d3.event.y)
+    //console.log('\n\nmouse.y: ' + d3.mouse(this)[1])
+    //console.log('y.invert(event.y): ' + y.invert(d3.event.y))
+    var cur_ind = parseInt(d3.select(this).attr('ind'));
+    //console.log('cur_ind: ' + cur_ind);
+    //console.log('circles_dat[cur_ind].x: ' + circles_dat[cur_ind].x);
+    //console.log('circles_dat[cur_ind].y: ' + circles_dat[cur_ind].y);
+
+
+
+    plot_brach.selectAll('circle')
+      .attr('cy', function(d, i){
+        /*var diff = 1 + Math.abs(d.index - cur_ind);
+          //d.y += d3.event.dy/diff;
+          d.y += d3.event.dy/Math.pow(diff,1.5);*/
+        if (cur_ind!=0 && cur_ind!=circles_dat.length-1){
+
+          var diff = 1 + Math.abs(d.index - cur_ind);
+          //d.y += d3.event.dy/diff;
+          var dy = cur_mouse_y - cur_y;
+          if (d.index!=0 && d.index!=circles_dat.length-1){
+              d.y = Math.min(percent_max*max_height - 0.01*Math.random(), d.y + dy/Math.pow(diff, 2));
+          }
+        }
+        return y_brach(d.y);
+    });
+
+    plot_brach.select('path').attr('d', line_brach);
+}
+
+function dragended(d) {
+    d3.select(this).classed('active', false);
+}
+
+function run_sim(){
+
+  var delay_amount = delay;
+  for (i=0; i<N_mutations; i++){
+    setTimeout(mutate, delay_amount * i);
+  }
+}
+
+
+function reset_sim(){
+
+  var reset_trans_dur = 100;
+
+  var circles_dat = reset_circles();
+
+  // Y domain/axis
+  y_brach.domain(d3.extent(circles_dat, function(d) { return d.y; }));
+  svg_brach.select(".y")
+  .transition()
+  .duration(reset_trans_dur)
+  .call(yAxis_brach);
+
+
+  plot_brach.selectAll('circle')
+    .transition()
+    .duration(reset_trans_dur)
+    .attr('cy', function(d,i){
+      d.y = circles_dat[i].y;
+      return y_brach(d.y);});
+
+  // Connecting lines
+  plot_brach.select('path').transition().duration(reset_trans_dur).attr('d', line_brach);
+
+
+
+
+  FF_hist_all = [{
+      x: 0,
+      y: fitness_function(circles_dat.map(el => el.y))
+    }];
+
+  FF_hist_accepted = [{
+      x: 0,
+      y: fitness_function(circles_dat.map(el => el.y))
+    }];
+
+  // Plot axes/domains
+  x_FF.domain(d3.extent(FF_hist_all.map(el => el.x)));
+  svg_FF.select(".x")
+  .transition()
+  .duration(2*reset_trans_dur)
+  .call(xAxis_FF);
+
+  y_FF.domain(d3.extent(FF_hist_all, function(d) { return d.y; }).map(x=>1.1*x))
+  svg_FF.select(".y")
+  .transition()
+  .duration(2*reset_trans_dur)
+  .call(yAxis_FF);
+
+  var FF_accepted_sel = plot_FF.select('path.accepted');
+  FF_accepted_sel
+      .datum(FF_hist_accepted)
+      .attr("fill", "none")
+      .attr("stroke", "black")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-linecap", "round")
+      .attr("stroke-width", 1.7)
+      .attr('class', 'accepted')
+      .attr('d', line_FF);
+  FF_accepted_sel.exit().remove();
+
+  var FF_all_sel = plot_FF.select('path.all');
+  FF_all_sel
+      .datum(FF_hist_all)
+      .attr('class', 'all')
+      .attr("fill", "none")
+      .attr("stroke", "tomato")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-linecap", "round")
+      .attr("stroke-width", 2.5)
+      .attr('d', line_FF);
+
+  FF_all_sel.exit().remove();
+
+
+}
+
+
+function fitness_function(state){
+
+  /*
+  state is the set of POINTS. If there are N points,
+  there are N-1 segments.
+  d calculates the vertical difference per segment.
+  */
+
+  var g = 9.8;
+  var delta_x = 1.0/(circles_dat.length - 1);
+
+  var d = array_subtract(state.slice(1, state.length), state.slice(0, -1));
+
+  d = d.map(x => -x);
+
+  var v = [0].concat(array_cumsum(d));
+  v = v.map(x => Math.sqrt(Math.max(0, 2.0*g*x)));
+  v = v.slice(0,-1);
+
+  var numer = array_subtract(array_add(array_mult(v, v), d.map(x => 2*g*x)).map(x => Math.sqrt(Math.max(0, x))), v);
+  var denom = array_div(d.map(x => g*x), (array_mult(d, d).map(x => x + Math.pow(delta_x, 2)).map(x => Math.sqrt(x))));
+  var t = array_div(numer, denom);
+
+  /*for (i=0; i<t.length; i++){
+    if (d[i]==0){
+      t[i] = 0;
+    }
+  }*/
+  var t_tot = t.reduce(add, 0);
+
+  return(t_tot);
+
+}
+
+function mutate(){
+
+  var mutate_index = choose(d3.range(1, N_circles-1));
+  var mutate_amount =  slider_strength.value()*(max_height - min_height)*(-0.5 + Math.random());
+
+  var dur_amount = 10;
+  var delay_amount = delay;
+
+  var cur_state = circles_dat.map(el => el.y);
+  var new_state = [...cur_state];
+  new_state[mutate_index] = Math.min(new_state[mutate_index] + mutate_amount, percent_max*max_height - 0.01*Math.random());
+
+  var cur_FF = fitness_function(cur_state);
+  var new_FF = fitness_function(new_state);
+  FF_hist_all.push({
+      x: FF_hist_all[FF_hist_all.length - 1].x + 1,
+      y: new_FF
+    });
+
+
+  x_FF.domain(d3.extent(FF_hist_all.map(el => el.x)));
+  svg_FF.select(".x")
+		.call(xAxis_FF);
+
+  y_FF.domain(d3.extent(FF_hist_all.map(el => el.y)));
+  svg_FF.select(".y")
+		.call(yAxis_FF);
+
+  y_brach.domain(d3.extent(circles_dat.map(el => el.y)));
+  svg_brach.select(".y")
+		.call(yAxis_brach);
+
+  var T = slider_temp.value();
+  var p_mut = Math.exp((cur_FF - new_FF)/T);
+
+  if (p_mut > Math.random()){
+
+    plot_brach.selectAll('circle')
+      .transition()
+      .delay(delay_amount)
+      .duration(dur_amount)
+      .attr('cy', function(d, i){
+        if (d.index == mutate_index){
+          d.y = new_state[mutate_index];
+        }
+        return y_brach(d.y);
+      });
+    plot_brach.select('path').transition().delay(delay_amount).duration(dur_amount).attr('d', line_brach);
+
+    cur_FF = new_FF;
+  }
+  FF_hist_accepted.push({
+      x: FF_hist_accepted[FF_hist_accepted.length - 1].x + 1,
+      y: cur_FF
+    });
+
+  plot_FF.select('path.accepted').attr('d', line_FF);
+  plot_FF.select('path.all').attr('d', line_FF);
+
+}
+
+
+
+
+
+
+function choose(choices) {
+  var index = Math.floor(Math.random() * choices.length);
+  return choices[index];
+}
+
+
+
+function sleep(ms) {
+   var now = new Date().getTime();
+   while(new Date().getTime() < now + ms){ /* do nothing */ }
+}
+
+
+function array_cumsum(arr_in){
+  //https://stackoverflow.com/questions/20477177/creating-an-array-of-cumulative-sum-in-javascript
+  var arr_out = [];
+  arr_in.reduce(function(a,b,i) { return arr_out[i] = a+b; },0);
+  return arr_out;
+}
+
+function array_add(a, b){
+  var c = [];
+  for(i=0; i<a.length; i++){
+    c.push(a[i] + b[i]);
+  }
+  return c;
+}
+
+function array_subtract(a, b){
+  var c = [];
+  for(i=0; i<a.length; i++){
+    c.push(a[i] - b[i]);
+  }
+  return c;
+}
+
+function array_mult(a, b){
+  var c = [];
+  for(i=0; i<a.length; i++){
+    c.push(a[i]*b[i]);
+  }
+  return c;
+}
+
+function array_div(a, b){
+  var c = [];
+  for(i=0; i<a.length; i++){
+    c.push(a[i]/b[i]);
+  }
+  return c;
+}
+
+function add(accumulator, a) {
+    return accumulator + a;
+}
+
+</script>

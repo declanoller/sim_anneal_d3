@@ -1,0 +1,513 @@
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://unpkg.com/d3-simple-slider"></script>
+<svg width="800" height="800" id="svg_ising"></svg>
+<svg width="500" height="400" id="svg_E"></svg>
+<svg width="500" height="400" id="svg_T"></svg>
+
+<body>
+<div class="row align-items-center">
+  <div class="col-sm-2"><p id="value_temp"></p></div>
+  <div class="col-sm"><div id="slider_temp"></div></div>
+</div>
+<div class="row align-items-center">
+  <div class="col-sm-2"><p id="value_strength"></p></div>
+  <div class="col-sm"><div id="slider_strength"></div></div>
+</div>
+
+<div id="option">
+  <input name="RunButton"
+         type="button"
+         value="Run"
+         onclick="run_sim()" />
+  <input name="ResetButton"
+        type="button"
+        value="Reset"
+        onclick="reset_sim()" />
+</div>
+
+<script>
+
+
+var T_init = 0.1;
+var T = T_init;
+var T_decr = 0.99;
+
+var N_spins = 30;
+var trans_dur = 20;
+
+var spins_dat = [];
+var spins_dict = {};
+for (i=0; i<N_spins; i++){
+  spins_dict[i] = {};
+  for (j=0; j<N_spins; j++){
+    var exp = Math.round(20*Math.random());
+    var s = Math.pow(-1, exp);
+    spins_dat.push({
+      x : i,
+      y : j,
+      state : s
+    })
+
+    spins_dict[i][j] = s;
+
+  }
+}
+
+var grid_dat = [];
+for (i=0; i<N_spins; i++){
+
+  grid_dat.push([{
+    x : i,
+    y : 0
+  },{
+    x : i,
+    y : N_spins-1
+  }]);
+
+  grid_dat.push([{
+    x : 0,
+    y : i
+  },{
+    x : N_spins-1,
+    y : i
+  }]);
+
+}
+
+var E_tot = hamiltonian();
+
+
+var temp_data = [...Array(5).keys()].map(x => Math.pow(10, -x));
+
+// Fill
+var slider_temp = d3
+  .sliderBottom()
+  .min(d3.min(temp_data))
+  .max(d3.max(temp_data))
+  .width(300)
+  .tickFormat(d3.format('.2'))
+  .ticks(5)
+  .default(0.015)
+  .fill('tomato')
+  .on('onchange', val => {
+    d3.select('p#value_temp').text("Temperature: " + d3.format('.2')(val)).attr("font-size", "14px");
+  });
+
+var gFill = d3
+  .select('div#slider_temp')
+  .append('svg')
+  .attr('width', 500)
+  .attr('height', 100)
+  .append('g')
+  .attr('transform', 'translate(30,30)');
+
+gFill.call(slider_temp);
+
+d3.select('p#value_temp').text("Temperature: " + d3.format('.2')(slider_temp.value())).attr("font-size", "14px");
+
+
+
+
+var margin = 50;
+var svg_ising = d3.select("#svg_ising");
+var svg_E = d3.select("#svg_E");
+var svg_T = d3.select("#svg_T");
+var w = +svg_ising.attr('width')
+var h = +svg_ising.attr('height')
+var width = +svg_E.attr('width') - 2*margin;
+var height = +svg_E.attr('height') - 2*margin;
+
+//fitness_function(circles_dat.map(el => el.y))
+var E_history = [{
+    index: 0,
+    x: 0,
+    y: E_tot
+  }];
+
+
+var T_history = [{
+    index: 0,
+    x: 0,
+    y: T_init
+  }];
+
+
+
+
+
+
+
+
+
+var x_E = d3.scaleLinear()
+    .domain([0, Math.max(...E_history.map(el => el.x))])
+    .range([margin, width - margin]);
+
+var y_E = d3.scaleLinear()
+    .domain(d3.extent(E_history, function(d) { return d.y; }).map(el => 1.1*el))
+    .range([height - margin, margin]);
+
+
+
+var x_T = d3.scaleLinear()
+    .domain([0, Math.max(...T_history.map(el => el.x))])
+    .range([margin, width - margin]);
+
+var y_T = d3.scaleLinear()
+    .domain(d3.extent(T_history, function(d) { return d.y; }).map(el => 1.1*el))
+    .range([height - margin, margin]);
+
+
+
+var xAxis_E = d3.axisBottom(x_E),
+    yAxis_E = d3.axisLeft(y_E);
+
+var line_E = d3.line()
+    .x(function(d) { return x_E(d.x); })
+    .y(function(d) { return y_E(d.y); });
+
+
+
+var xAxis_T = d3.axisBottom(x_T),
+    yAxis_T = d3.axisLeft(y_T);
+
+var line_T = d3.line()
+    .x(function(d) { return x_T(d.x); })
+    .y(function(d) { return y_T(d.y); });
+
+
+
+
+var plot_E = svg_E.append("g")
+            .attr("transform", "translate(" + margin + "," + margin + ")");
+
+
+plot_E.append("path")
+    .datum(E_history)
+    .attr("fill", "none")
+    .attr("stroke", "mediumseagreen")
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .attr("stroke-width", 2.5)
+    .attr("d", line_E);
+
+
+
+var text_data_E = [
+  {x: width/2, y: 0, label: 'status', txt: 'Total energy = ' + E_tot},
+  {x: width/2, y: height, label: 'iter', txt: 'Iteration'},
+  {x: 0, y: height/2, label: 'ylabel', txt: 'Energy'}
+];
+
+var text_E = plot_E.selectAll("text")
+                        .data(text_data_E)
+                        .enter()
+                        .append("text");
+
+/*.attr("x", function(d) { return d.x; })
+.attr("y", function(d) { return d.y; })
+*/
+//Add SVG Text Element Attributes
+var text_labels_E = text_E
+                .attr("transform", function (d) {
+                      if (d.label=='ylabel'){
+                        return "translate(" + d.x + "," + d.y + ") rotate(-90)";
+                      }
+                      else{
+                        return "translate(" + d.x + "," + d.y + ") rotate(0)";
+                      }})
+                .text( function (d) {return d.txt;})
+                .attr("font-family", "sans-serif")
+                .attr("font-size", "18px")
+                .attr("text-anchor", "middle")
+                .attr("fill", "black");
+
+
+
+
+plot_E.append('g')
+    .attr('class', 'x axis')
+    .attr('transform', 'translate(0,' + (height - margin) + ')')
+    .call(xAxis_E);
+
+plot_E.append('g')
+    .attr('class', 'y axis')
+    .attr('transform', 'translate(' + margin + ',0)')
+    .call(yAxis_E);
+
+
+
+
+var plot_T = svg_T.append("g")
+            .attr("transform", "translate(" + margin + "," + margin + ")");
+
+
+plot_T.append("path")
+    .datum(T_history)
+    .attr("fill", "none")
+    .attr("stroke", "tomato")
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .attr("stroke-width", 2.5)
+    .attr("d", line_T);
+
+
+
+var text_data_T = [
+  {x: width/2, y: 0, label: 'status', txt: 'T = ' + T},
+  {x: width/2, y: height, label: 'iter', txt: 'Iteration'},
+  {x: 0, y: height/2, label: 'ylabel', txt: 'Temperature'}
+];
+
+var text_T = plot_T.selectAll("text")
+                        .data(text_data_T)
+                        .enter()
+                        .append("text");
+
+//Add SVG Text Tlement Attributes
+var text_labels_T = text_T
+                .attr("transform", function (d) {
+                      if (d.label=='ylabel'){
+                        return "translate(" + d.x + "," + d.y + ") rotate(-90)";
+                      }
+                      else{
+                        return "translate(" + d.x + "," + d.y + ") rotate(0)";
+                      }})
+                .text( function (d) {return d.txt;})
+                .attr("font-family", "sans-serif")
+                .attr("font-size", "18px")
+                .attr("text-anchor", "middle")
+                .attr("fill", "black");
+
+plot_T.append('g')
+    .attr('class', 'x axis')
+    .attr('transform', 'translate(0,' + (height - margin) + ')')
+    .call(xAxis_T);
+
+plot_T.append('g')
+    .attr('class', 'y axis')
+    .attr('transform', 'translate(' + margin + ',0)')
+    .call(yAxis_T);
+
+
+
+
+var x_ising = d3.scaleLinear()
+    .domain([0, N_spins])
+    .range([margin, w - margin]);
+
+var y_ising = d3.scaleLinear()
+    .domain([0, N_spins])
+    .range([margin, h - margin]);
+
+
+
+function xy_to_arrow(d){
+
+  if (d.state==1){
+    var a = [[ 0.25 ,  0.075],
+       [ 0.   ,  0.375],
+       [-0.25 ,  0.075],
+       [-0.1  ,  0.075],
+       [-0.1  , -0.375],
+       [ 0.1  , -0.375],
+       [ 0.1  ,  0.075],
+       [ 0.25 ,  0.075]];
+  }
+  else{
+    var a = [[-0.25 , -0.075],
+       [ 0.   , -0.375],
+       [ 0.25 , -0.075],
+       [ 0.1  , -0.075],
+       [ 0.1  ,  0.375],
+       [-0.1  ,  0.375],
+       [-0.1  , -0.075],
+       [-0.25 , -0.075]];
+  }
+
+  //return a.map(el => [x_ising(el[0]), y_ising(el[1])]);
+  return a.map(el => [x_ising(el[0] + d.x), y_ising(el[1] + d.y)]);
+}
+
+
+function arrow(d, i) {
+
+    var a = xy_to_arrow(d);
+    d3.select(this)
+        .transition()
+        .duration(trans_dur)
+        .attr('d', `M ${[...a]} Z`)
+}
+
+
+var line_grid = d3.line()
+    .x(function(d) { return x_ising(d.x); })
+    .y(function(d) { return y_ising(d.y); });
+
+
+var svg_grid = d3.select('svg#svg_ising')
+    .selectAll('grid')
+    .data(grid_dat)
+
+var enter_grid = svg_grid.enter()
+    .append('path')
+    .attr("stroke", "black")
+    //.attr('d', line_grid)
+
+
+
+var svg = d3.select('svg#svg_ising')
+    .selectAll('g')
+    .data(spins_dat)
+
+var enter = svg.enter()
+    .append('g')
+    .attr("stroke-width", 1)
+    .attr("stroke", "black")
+    .attr("fill", function (d){ if(d.state==1){return 'lightblue';}else{return 'tomato';}})
+    .append('path')
+    .each(arrow);
+
+    //.attr("transform", function (d){console.log("translate(" + x_ising(d.x) + "," + y_ising(d.y) + ")");return ("translate(" + x_ising(d.x) + "," + y_ising(d.y) + ")");})
+
+svg.exit().remove()
+
+
+run_sim();
+
+
+function hamiltonian(){
+
+  var E = 0;
+
+  for (var ind=0; ind<spins_dat.length; ind++){
+
+    var x = spins_dat[ind].x;
+    var y = spins_dat[ind].y;
+    var s = spins_dat[ind].state;
+
+    if (x > 0){
+      E += -spins_dict[x-1][y]*s;
+    }
+    if (x < N_spins-1){
+      E += -spins_dict[x+1][y]*s;
+    }
+    if (y > 0){
+      E += -spins_dict[x][y-1]*s;
+    }
+    if (y < N_spins-1){
+      E += -spins_dict[x][y+1]*s;
+    }
+
+  }
+
+  return E;
+}
+
+
+function flip_state(){
+  var ind = Math.round(Math.random()*(N_spins*N_spins - 1));
+
+  var x = spins_dat[ind].x;
+  var y = spins_dat[ind].y;
+  var s = spins_dat[ind].state;
+
+  var E_switch = 0;
+  if (x > 0){
+    E_switch += spins_dict[x-1][y]*s;
+  }
+  if (x < N_spins-1){
+    E_switch += spins_dict[x+1][y]*s;
+  }
+  if (y > 0){
+    E_switch += spins_dict[x][y-1]*s;
+  }
+  if (y < N_spins-1){
+    E_switch += spins_dict[x][y+1]*s;
+  }
+
+
+
+  T = T_decr*T;
+  T_history.push({
+      index: T_history[T_history.length - 1].index + 1,
+      x: T_history[T_history.length - 1].x + 1,
+      y: T
+    });
+
+  var p_mut = Math.exp(-E_switch/T);
+
+  if (p_mut > Math.random()){
+
+    spins_dat[ind].state = s*-1;
+    spins_dict[x][y] = spins_dat[ind].state;
+    d3.select('svg#svg_ising').selectAll('g').selectAll('path')
+    .style("fill", function (d){ if(d.state==1){return 'lightblue';}else{return 'tomato';}})
+    .each(arrow);
+
+    E_tot += E_switch;
+
+    //d3.select('svg#ising').select('g').attr("fill", function (d){
+            //if(d.state==1){return 'lightblue';}else{return 'tomato';}});
+  }
+
+
+  E_history.push({
+      index: E_history[E_history.length - 1].index + 1,
+      x: E_history[E_history.length - 1].x + 1,
+      y: E_tot
+    });
+
+
+
+  plot_E.select('path').attr('d', line_E);
+  x_E.domain(d3.extent(E_history.map(el => el.x)));
+  svg_E.select(".x")
+    .call(xAxis_E);
+
+  y_E.domain(d3.extent(E_history.map(el => el.y)));
+  svg_E.select(".y")
+    .call(yAxis_E);
+
+  plot_T.select('path').attr('d', line_T);
+  x_T.domain(d3.extent(T_history.map(el => el.x)));
+  svg_T.select(".x")
+    .call(xAxis_T);
+
+  y_T.domain(d3.extent(T_history.map(el => el.y)));
+  svg_T.select(".y")
+    .call(yAxis_T);
+
+  text_T.text( function(d){
+    if (d.label == 'status'){
+      return ('Temperature = ' + T.toFixed(3));
+      //text_data_T[i].txt = 'Temperature = ' + T;
+    }
+    else{
+      return d.txt;
+    }
+  })
+
+
+}
+
+
+
+function run_sim(){
+
+  var N_flips = 5000;
+  var delay_amount = trans_dur;
+  //var delay_amount = 3;
+  for (i=0; i<N_flips; i++){
+    //spins_dat[i].state = spins_dat[i].state*-1;
+    setTimeout(flip_state, delay_amount * i);
+    //flip_state();
+  }
+}
+
+
+
+</script>
+
+</body>
